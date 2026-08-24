@@ -358,5 +358,5 @@ canvas#plates { pointer-events: none; }
   box-shadow: var(--glow);
 }
 
-/* Der Zielknopf sitzt unterhalb der Reitknöpfe und ist immer erreichbar. */
-.sidebtns.targetcol { bottom: calc(88px + var(--safe-b)); }
+/* Reit- und Zielknöpfe teilen sich eine Säule über der Fertigkeitenleiste. */
+.mountgroup { display: flex; flex-direction: column; gap: 8px; align-items: center; }

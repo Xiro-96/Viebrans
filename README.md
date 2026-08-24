@@ -42,10 +42,12 @@ App-Symbol auf dem Handy und startet im Vollbild, auch offline.
 
 ## Spielen
 
-- **Linke Bildschirmhälfte unten**: dort, wo der Daumen aufsetzt, erscheint der Steuerknüppel.
-- **Rechte Seite wischen** dreht die Kamera, **zwei Finger** zoomen.
-- **Kurz tippen** visiert einen Gegner an oder schickt den Helden zu einem Punkt.
-- Der Knopf **🎯** rechts schaltet auf den nächsten Gegner weiter, ganz ohne Zielen.
+Klick-und-Laufen wie im Vorbild — es gibt keinen Steuerknüppel.
+
+- **Auf den Boden tippen** schickt den Helden dorthin, eine Marke zeigt das Ziel.
+- **Auf einen Gegner tippen** visiert ihn an: der Held läuft hin und schlägt von selbst zu.
+- **Wischen** dreht die Kamera, **zwei Finger** zoomen.
+- Der Knopf **🎯** schaltet auf den nächsten Gegner weiter, ganz ohne Zielen.
 - Die sechs Felder unten sind die Fertigkeitenleiste.
 - Die runden Knöpfe rechts: aufsitzen und absteigen, darüber steigen und sinken.
 - Am Rechner: `W A S D` laufen, `1`–`6` Fertigkeiten, `Tab` zielt, `M` aufsitzen, `R`/`F` steigen und sinken.

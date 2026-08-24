@@ -35,7 +35,7 @@ export class Hud {
   private downBtn!: HTMLButtonElement;
   private sideBtns!: HTMLElement;
   private targetBtn!: HTMLElement;
-  private targetCol!: HTMLElement;
+  private mountGroup!: HTMLElement;
 
   constructor(private game: Game, private onNav: (tab: TabId) => void) {
     this.nameRow = el('div', { class: 'namerow' });
@@ -92,13 +92,13 @@ export class Hud {
     };
     hold(this.upBtn, 1);
     hold(this.downBtn, -1);
-    this.sideBtns = el('div', { class: 'sidebtns' }, [this.upBtn, this.downBtn, this.mountBtn]);
-    // Der Zielknopf steht immer bereit, auch ohne Reittier.
-    this.targetCol = el('div', { class: 'sidebtns targetcol' }, [this.targetBtn]);
+    // Eine Säule: Steigen, Sinken, Reittier, Zielen. Der Zielknopf ist immer da.
+    this.mountGroup = el('div', { class: 'mountgroup' }, [this.upBtn, this.downBtn, this.mountBtn]);
+    this.sideBtns = el('div', { class: 'sidebtns' }, [this.mountGroup, this.targetBtn]);
 
     this.root = el('div', { class: 'hud' }, [
       topLeft, this.chips, this.targetFrame, this.noticeBox, this.ticker,
-      this.sideBtns, this.targetCol,
+      this.sideBtns,
       el('div', { class: 'actionbar' }, [this.skillBar, this.navBar]),
     ]);
     this.buildSkillBar();
@@ -221,7 +221,7 @@ export class Hud {
     // Reiten und Fliegen
     const mountDef = g.mount;
     const canRide = !!mountDef && g.scene === 'world';
-    this.sideBtns.style.display = save.mounts.length && g.scene === 'world' ? 'flex' : 'none';
+    this.mountGroup.style.display = save.mounts.length && g.scene === 'world' ? 'flex' : 'none';
     this.mountBtn.dataset.on = g.mounted ? '1' : '0';
     (this.mountBtn as HTMLButtonElement).disabled = !canRide && !g.mounted;
     this.mountBtn.textContent = mountDef ? MOUNT_ICON[mountDef.style] : '🐗';

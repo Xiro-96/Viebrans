@@ -110,6 +110,31 @@ await page.evaluate(() => { window.viebrans.renderer().pitch = 0.36; });
 await page.waitForTimeout(900);
 await page.screenshot({ path: `${OUT}/n6-hoch.png` });
 
+// Über den See fliegen
+await page.evaluate(() => {
+  const g = window.viebrans.game();
+  const r = window.viebrans.renderer();
+  g.player.x = 420; g.player.y = 2050; g.player.alt = 150;
+  r.yaw = 0; r.pitch = 0.42;
+  for (let i = 0; i < 90; i++) { g.update(1 / 60); r.draw(g, 1 / 60); }
+});
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${OUT}/n12-see.png` });
+
+// Voll ausgerüsteter Held am Lagerfeuer
+await page.evaluate(() => {
+  const g = window.viebrans.game();
+  const r = window.viebrans.renderer();
+  window.viebrans.setLevel(60);
+  window.viebrans.gearUp(58);
+  g.player.mountId = null; g.player.alt = 0;
+  g.player.x = 1000; g.player.y = 800;
+  r.yaw = Math.PI * 0.8; r.pitch = 0.5; r.distance = 230;
+  for (let i = 0; i < 120; i++) { g.update(1 / 60); r.draw(g, 1 / 60); }
+});
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${OUT}/n13-held.png` });
+
 // Landen, Menüs
 await page.evaluate(() => {
   const g = window.viebrans.game();

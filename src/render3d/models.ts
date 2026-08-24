@@ -57,12 +57,43 @@ export interface Rig {
   extra: THREE.Object3D[];
 }
 
+/** Beschreibt, wie eine Figur aussehen soll — treibt Rüstung und Zierrat. */
+export interface Look {
+  classId: string;
+  seed: number;
+  /** Ausrüstungsstufe 0–3: je höher, desto mehr Beschläge und ein Umhang. */
+  tier: number;
+  /** Farbe des Rüstungsteils, sonst die Klassenfarbe. */
+  armorColor?: number;
+  helmet: boolean;
+}
+
+/** Grobe Ausrüstungsstufe aus dem Gear-Score. */
+export function tierFor(gearScore: number): number {
+  if (gearScore >= 320) return 3;
+  if (gearScore >= 150) return 2;
+  if (gearScore >= 55) return 1;
+  return 0;
+}
+
+const TRIM = [0x6a5a48, 0xb8c2cc, 0xd8a548, 0xf6d98a];
+const CLOTH = [0x3f4a68, 0x40507a, 0x51408a, 0x6a3f7a];
+
 /**
  * Chibi-Figur: großer Kopf, kurzer Körper — die Proportionen des Vorbilds.
  * Die Gliedmaßen hängen an Drehpunkten, damit sie sauber ausschlagen.
+ * Je besser die Ausrüstung, desto mehr Beschläge trägt sie sichtbar.
  */
-export function buildCharacter(classId: string, seed = 0): Rig {
-  const color = CLASS_COLORS[classId] ?? 0x9aa0a6;
+export function buildCharacter(look: Look): Rig {
+  const { classId, seed, tier } = look;
+  const base = CLASS_COLORS[classId] ?? 0x9aa0a6;
+  // Die Seltenheit tönt die Rüstung nur an — die Klassenfarbe bleibt erkennbar.
+  const color = look.armorColor === undefined
+    ? base
+    : new THREE.Color(base).lerp(new THREE.Color(look.armorColor), 0.42).getHex();
+  const trim = TRIM[tier];
+  const cloth = CLOTH[tier];
+
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
@@ -71,22 +102,98 @@ export function buildCharacter(classId: string, seed = 0): Rig {
   torso.position.y = 13;
   body.add(torso);
 
-  // Gürtel und Schulterstück heben die Silhouette ab.
-  const belt = cyl(6.6, 6.6, 2.2, 0x5a3a22, 12);
+  // Brustplatte: ab der zweiten Stufe sichtbar aufgesetzt.
+  if (tier >= 1) {
+    const plate = new THREE.Mesh(new THREE.SphereGeometry(6.5, 12, 8, 0, Math.PI), mat(trim));
+    plate.scale.set(1, 0.85, 0.55);
+    plate.position.set(0, 14.5, 1.4);
+    body.add(plate);
+  }
+
+  const belt = cyl(6.6, 6.6, 2.2, tier >= 1 ? trim : 0x5a3a22, 12);
   belt.position.y = 9.5;
   body.add(belt);
 
+  // Schulterstücke wachsen mit der Stufe.
+  if (tier >= 1) {
+    for (const sx of [-1, 1]) {
+      const pad = new THREE.Mesh(new THREE.SphereGeometry(3.6 + tier * 0.5, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(trim));
+      pad.position.set(7.4 * sx, 17.6, 0);
+      pad.rotation.z = sx * 0.32;
+      body.add(pad);
+      if (tier >= 3) {
+        const spike = cone(1.5, 5, trim, 6);
+        spike.position.set(8.6 * sx, 21, 0);
+        spike.rotation.z = sx * 0.5;
+        body.add(spike);
+      }
+    }
+  }
+
+  // Umhang ab der dritten Stufe.
+  if (tier >= 2) {
+    const cape = new THREE.Mesh(
+      new THREE.SphereGeometry(8, 12, 8, 0, Math.PI, 0, Math.PI * 0.7),
+      new THREE.MeshLambertMaterial({ color: cloth, side: THREE.DoubleSide }),
+    );
+    cape.scale.set(1, 1.5, 0.35);
+    cape.position.set(0, 14, -3.4);
+    cape.rotation.y = Math.PI;
+    cape.name = 'cape';
+    body.add(cape);
+  }
+
   const head = new THREE.Group();
   head.position.y = 21.5;
-  const skull = ball(7.4, SKIN, 14);
-  head.add(skull);
+  head.add(ball(7.4, SKIN, 14));
+
+  // Drei Frisuren, damit sich die Bevölkerung unterscheidet.
+  const hairColor = HAIR[seed % HAIR.length];
+  const style = seed % 3;
   const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(7.7, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    mat(HAIR[seed % HAIR.length]),
+    new THREE.SphereGeometry(7.7, 14, 10, 0, Math.PI * 2, 0, style === 0 ? Math.PI * 0.62 : Math.PI * 0.5),
+    mat(hairColor),
   );
   hair.position.y = 0.6;
   head.add(hair);
-  // Augen als flache Scheiben — reicht, um Blickrichtung zu zeigen.
+  if (style === 1) {
+    // Zopf im Nacken
+    const tail = capsule(2.2, 7, hairColor);
+    tail.position.set(0, -1.5, -7);
+    tail.rotation.x = 0.5;
+    head.add(tail);
+  } else if (style === 2) {
+    // Stacheln nach oben
+    for (let i = 0; i < 4; i++) {
+      const sp = cone(1.7, 5, hairColor, 5);
+      sp.position.set(-3 + i * 2, 7.2, -1 + (i % 2) * 2);
+      sp.rotation.z = (i - 1.5) * 0.2;
+      head.add(sp);
+    }
+  }
+
+  if (look.helmet && tier >= 1) {
+    // Offener Helm: die Kalotte deckt nur den Schädel, das Gesicht bleibt frei.
+    const helm = new THREE.Mesh(
+      new THREE.SphereGeometry(8.0, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.36),
+      mat(trim),
+    );
+    helm.position.y = 1.8;
+    head.add(helm);
+    // Nasenschutz statt geschlossenem Visier.
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.6, 6, 1.2), mat(trim));
+    nose.position.set(0, 2.4, 7.2);
+    head.add(nose);
+    if (tier >= 2) {
+      for (const sx of [-1, 1]) {
+        const wing = cone(1.5, 5.5, trim, 5);
+        wing.position.set(6.6 * sx, 5.2, -0.5);
+        wing.rotation.z = sx * 1.2;
+        head.add(wing);
+      }
+    }
+  }
+
   for (const sx of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.CircleGeometry(1.15, 10), mat(0x2a2230));
     eye.position.set(2.6 * sx, 0.6, 7.05);
@@ -94,19 +201,27 @@ export function buildCharacter(classId: string, seed = 0): Rig {
   }
   body.add(head);
 
-  const limb = (sx: number, y: number, len: number, c: number) => {
+  const limb = (sx: number, y: number, len: number, c: number, cuff: number | null) => {
     const pivot = new THREE.Group();
     pivot.position.set(sx, y, 0);
     const m = capsule(2.5, len, c);
     m.position.y = -len / 2 - 1;
     pivot.add(m);
+    if (cuff !== null) {
+      // Handschuh beziehungsweise Stiefel am Ende der Gliedmaße.
+      const end = capsule(2.8, 2.4, cuff);
+      end.position.y = -len - 1.2;
+      pivot.add(end);
+    }
     return pivot;
   };
 
-  const armL = limb(-7.2, 16.5, 7, color);
-  const armR = limb(7.2, 16.5, 7, color);
-  const legL = limb(-3.2, 9, 7, 0x3f4a68);
-  const legR = limb(3.2, 9, 7, 0x3f4a68);
+  const glove = tier >= 1 ? trim : 0x6a5a48;
+  const boot = tier >= 1 ? trim : 0x2f3852;
+  const armL = limb(-7.2, 16.5, 7, color, glove);
+  const armR = limb(7.2, 16.5, 7, color, glove);
+  const legL = limb(-3.2, 9, 7, cloth, boot);
+  const legR = limb(3.2, 9, 7, cloth, boot);
   body.add(armL, armR, legL, legR);
 
   const mount = new THREE.Group();

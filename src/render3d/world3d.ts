@@ -6,9 +6,14 @@ import * as THREE from 'three';
 import { TOWN, WORLD_H, WORLD_W, ZONES } from '../game/world';
 import { DUNGEON_H, DUNGEON_W } from '../game/dungeons';
 import { PALETTE } from './palette';
-import { terrainHeight } from './terrain';
+import { LAKE, terrainHeight } from './terrain';
 import { mat } from './models';
 import { rint, rng, seed as setSeed } from '../game/rng';
+
+/** Kurzform für die vielen Pfosten, Halme und Säulen. */
+function cylinder(rt: number, rb: number, h: number, color: number): THREE.Mesh {
+  return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 6), mat(color));
+}
 
 const GRASS = new THREE.Color(PALETTE.grass);
 const GRASS_DARK = new THREE.Color(PALETTE.grassDark);
@@ -188,8 +193,9 @@ function buildFlora(): THREE.Group {
   const place = (margin: number): [number, number] | null => {
     const x = -400 + rng() * (WORLD_W + 800);
     const z = -400 + rng() * (WORLD_H + 800);
-    // Der Stadtplatz und die unmittelbare Umgebung bleiben frei.
+    // Stadtplatz und See bleiben frei.
     if (Math.hypot(x - TOWN.x, z - TOWN.y) < TOWN.r + margin) return null;
+    if (Math.hypot(x - LAKE.x, z - LAKE.y) < LAKE.r + 20) return null;
     return [x, z];
   };
 
@@ -331,9 +337,134 @@ function buildSignposts(): THREE.Group {
   return g;
 }
 
+/** Wahrzeichen, die der Welt Orientierung und Leben geben. */
+function buildLandmarks(): THREE.Group {
+  const g = new THREE.Group();
+  setSeed(4242);
+
+  // See mit Schilfgürtel und einem Steg.
+  const water = new THREE.Mesh(
+    new THREE.CircleGeometry(LAKE.r * 0.94, 40),
+    new THREE.MeshLambertMaterial({ color: PALETTE.water, transparent: true, opacity: 0.88 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(LAKE.x, -8, LAKE.y);
+  water.name = 'water';
+  g.add(water);
+  for (let i = 0; i < 60; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = LAKE.r * (0.9 + rng() * 0.12);
+    const x = LAKE.x + Math.cos(a) * r;
+    const z = LAKE.y + Math.sin(a) * r;
+    const reed = cylinder(0.8, 1.1, 14 + rng() * 10, 0x6f9a4a);
+    reed.position.set(x, terrainHeight(x, z) + 7, z);
+    reed.rotation.z = (rng() - 0.5) * 0.4;
+    g.add(reed);
+  }
+  const pier = new THREE.Mesh(new THREE.BoxGeometry(16, 3, 90), mat(PALETTE.wood));
+  pier.position.set(LAKE.x, -2, LAKE.y - LAKE.r * 0.72);
+  g.add(pier);
+  for (let i = 0; i < 4; i++) {
+    const post = cylinder(1.6, 1.6, 22, 0x6a4626);
+    post.position.set(LAKE.x - 6 + (i % 2) * 12, -10, LAKE.y - LAKE.r * 0.72 - 34 + Math.floor(i / 2) * 60);
+    g.add(post);
+  }
+
+  // Lagerfeuer als Rastplätze.
+  const camps: [number, number][] = [[1000, 760], [1850, 780], [900, 1420], [1820, 1420]];
+  for (const [x, z] of camps) {
+    const y = terrainHeight(x, z);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(4, 0), mat(PALETTE.rock));
+      stone.position.set(x + Math.cos(a) * 11, y + 2, z + Math.sin(a) * 11);
+      g.add(stone);
+      const log = cylinder(1.4, 1.4, 13, PALETTE.wood);
+      log.position.set(x + Math.cos(a + 0.6) * 3, y + 3, z + Math.sin(a + 0.6) * 3);
+      log.rotation.set(1.3, a, 0);
+      g.add(log);
+    }
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 7), mat(0xffb44a, { emissive: 0xff7a1a }));
+    flame.position.set(x, y + 9, z);
+    flame.name = 'flicker';
+    g.add(flame);
+  }
+
+  // Ruinen im Ödland.
+  setSeed(909);
+  for (let i = 0; i < 14; i++) {
+    const x = 1050 + rng() * 560;
+    const z = 150 + rng() * 260;
+    const y = terrainHeight(x, z);
+    const h = 30 + rng() * 70;
+    const col = cylinder(6, 8, h, 0xb9b2a4);
+    col.position.set(x, y + h / 2, z);
+    col.rotation.z = (rng() - 0.5) * 0.22;
+    g.add(col);
+    if (rng() < 0.4) {
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(20, 6, 20), mat(0xa9a294));
+      cap.position.set(x, y + h + 3, z);
+      cap.rotation.y = rng();
+      g.add(cap);
+    }
+  }
+
+  // Weidezäune auf der Sonnenwiese.
+  setSeed(1717);
+  for (let f = 0; f < 3; f++) {
+    const x0 = 800 + rng() * 380;
+    const z0 = 660 + rng() * 280;
+    const len = 6 + Math.floor(rng() * 6);
+    const dir = rng() * Math.PI * 2;
+    for (let i = 0; i < len; i++) {
+      const x = x0 + Math.cos(dir) * i * 22;
+      const z = z0 + Math.sin(dir) * i * 22;
+      const y = terrainHeight(x, z);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(2.6, 18, 2.6), mat(PALETTE.wood));
+      post.position.set(x, y + 9, z);
+      g.add(post);
+      if (i < len - 1) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(22, 2, 1.8), mat(PALETTE.wood));
+        rail.position.set(x + Math.cos(dir) * 11, y + 12, z + Math.sin(dir) * 11);
+        rail.rotation.y = -dir;
+        g.add(rail);
+      }
+    }
+  }
+
+  return g;
+}
+
+/** Kreisende Vögel — kosten fast nichts und beleben den Himmel. */
+function buildBirds(): THREE.Group {
+  const g = new THREE.Group();
+  const m = new THREE.MeshLambertMaterial({ color: 0x2f3a4a, side: THREE.DoubleSide });
+  for (let i = 0; i < 14; i++) {
+    const bird = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.PlaneGeometry(9, 3), m);
+      wing.position.x = 4.5 * sx;
+      wing.rotation.z = sx * 0.3;
+      bird.add(wing);
+    }
+    bird.userData = {
+      r: 200 + Math.random() * 700,
+      h: 180 + Math.random() * 260,
+      speed: 0.1 + Math.random() * 0.16,
+      phase: Math.random() * Math.PI * 2,
+    };
+    bird.name = 'bird';
+    g.add(bird);
+  }
+  return g;
+}
+
 export function buildWorldScenery(): THREE.Group {
   const g = new THREE.Group();
-  g.add(buildTerrain(), buildTown(), buildFlora(), buildSignposts(), buildHorizon());
+  g.add(
+    buildTerrain(), buildTown(), buildFlora(), buildLandmarks(),
+    buildSignposts(), buildBirds(), buildHorizon(),
+  );
   return g;
 }
 

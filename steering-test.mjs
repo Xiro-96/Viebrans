@@ -31,6 +31,8 @@ const probe = (yaw, sx, sy) => page.evaluate(({ yaw, sx, sy }) => {
   const r = window.viebrans.renderer();
   r.yaw = yaw;
   const p = g.player;
+  // Freies Feld: sonst schieben Nachbarfiguren den Helden beim Messen beiseite.
+  g.actors = [p];
   p.x = 1300; p.y = 1300; p.alt = 0; p.moveTo = null; p.targetId = null;
   // Kamera erst einschwingen lassen, sonst misst man die Nachführung mit.
   for (let i = 0; i < 60; i++) r.draw(g, 1 / 60);

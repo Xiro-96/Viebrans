@@ -129,6 +129,8 @@ export class Game {
   chat: ChatMessage[] = [];
   notices: Notice[] = [];
   loot: Item[] = [];
+  /** Wohin zuletzt getippt wurde — der Renderer zeigt dort eine Marke. */
+  clickMark: { x: number; y: number; t: number } | null = null;
   /** Ausgewählte Fähigkeit wartet auf Ziel? (nicht genutzt — Autoziel) */
   paused = false;
   private botActorLimit = 14;
@@ -685,6 +687,14 @@ export class Game {
     a.mp = Math.min(a.maxMp, a.mp + mpRate * dt * townBonus);
   }
 
+  /** Dreht die Figur weich in eine Richtung, statt sie umspringen zu lassen. */
+  private turnTowards(a: Actor, want: number, dt: number): void {
+    let d = want - a.facing;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    a.facing += d * Math.min(1, dt * 14);
+  }
+
   private move(a: Actor, dt: number): void {
     const m = this.mods(a);
     let speed = a.cs.moveSpeed * (1 + (m.speed ?? 0)) * (1 - Math.min(0.8, m.slow ?? 0));
@@ -697,7 +707,7 @@ export class Game {
       const len = Math.hypot(a.moveDir.x, a.moveDir.y);
       if (len > 0.001) {
         a.moveTo = null;
-        a.facing = Math.atan2(a.moveDir.y, a.moveDir.x);
+        this.turnTowards(a, Math.atan2(a.moveDir.y, a.moveDir.x), dt);
         a.vx = (a.moveDir.x / len) * speed * Math.min(1, len);
         a.vy = (a.moveDir.y / len) * speed * Math.min(1, len);
         const bb = this.bounds;
@@ -732,7 +742,7 @@ export class Game {
       a.stride = 0;
       return;
     }
-    a.facing = Math.atan2(dy, dx);
+    this.turnTowards(a, Math.atan2(dy, dx), dt);
     a.vx = (dx / dist) * speed;
     a.vy = (dy / dist) * speed;
     const b = this.bounds;
@@ -1059,6 +1069,7 @@ export class Game {
     this.player.targetId = null;
     this.player.moveDir = null;
     this.player.moveTo = { x, y };
+    this.clickMark = { x, y, t: this.time };
   }
 
   /**

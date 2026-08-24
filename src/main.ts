@@ -8,7 +8,6 @@ import { seed } from './game/rng';
 import { Renderer3D } from './render3d/scene';
 import { Overlay } from './render3d/overlay';
 import { Hud } from './ui/hud';
-import { Joystick } from './ui/joystick';
 import { Panels, type TabId } from './ui/panels';
 import { clear, el, tap, toast } from './ui/dom';
 import type { ClassId } from './game/types';
@@ -27,7 +26,6 @@ let renderer: Renderer3D | null = null;
 let overlay: Overlay | null = null;
 let hud: Hud | null = null;
 let panels: Panels | null = null;
-let stick: Joystick | null = null;
 let saveTimer = 0;
 
 // ------------------------------------------------------------------ Screens
@@ -113,19 +111,19 @@ function startGame(data: SaveData): void {
   game = new Game(data);
   renderer = new Renderer3D(canvas);
   overlay = new Overlay(plates);
-  stick = new Joystick();
   panels = new Panels(game, () => {
     hud?.buildSkillBar();
     persist();
   });
   hud = new Hud(game, (tab: TabId) => panels!.toggle(tab));
-  gameRoot.append(hud.root, stick.root, panels.root);
+  gameRoot.append(hud.root, panels.root);
   renderer.resize();
   overlay.resize();
 
   bindInput();
   game.notify(`Willkommen in Hafen Viebran, ${data.name}.`, 'info');
-  game.notify('Links laufen, rechts die Kamera drehen.', 'info');
+  game.notify('Tippe auf den Boden zum Laufen, auf einen Gegner zum Angreifen.', 'info');
+  game.notify('Wischen dreht die Kamera, zwei Finger zoomen.', 'info');
   requestAnimationFrame(loop);
 }
 
@@ -145,8 +143,6 @@ function bindInput(): void {
 
   interface Track { x0: number; y0: number; x: number; y: number; far: number; t0: number }
   const drags = new Map<number, Track>();
-  /** Auch der Knüppelfinger kann noch ein Tipp werden. */
-  let stickTrack: Track | null = null;
   let pinchStart: number | null = null;
 
   const track = (ev: PointerEvent): Track =>
@@ -172,28 +168,15 @@ function bindInput(): void {
     }
   };
 
-  // Die Knüppelzone reicht nur noch über das untere Viertel links — darüber
-  // lässt sich überall zielen.
-  const isStickZone = (x: number, y: number) =>
-    x < window.innerWidth * 0.42 && y > window.innerHeight * 0.58;
-
+  // Reines Klick-und-Laufen wie im Vorbild: tippen bewegt oder greift an,
+  // wischen dreht die Kamera. Kein Steuerknüppel.
   canvas.addEventListener('pointerdown', (ev) => {
     if (panels?.open) return;
     canvas.setPointerCapture(ev.pointerId);
-    if (stick && !stick.active && isStickZone(ev.clientX, ev.clientY)) {
-      stick.start(ev.pointerId, ev.clientX, ev.clientY);
-      stickTrack = track(ev);
-      return;
-    }
     drags.set(ev.pointerId, track(ev));
   });
 
   canvas.addEventListener('pointermove', (ev) => {
-    if (stick?.owns(ev.pointerId)) {
-      stick.move(ev.clientX, ev.clientY);
-      if (stickTrack) advance(stickTrack, ev.clientX, ev.clientY);
-      return;
-    }
     const d = drags.get(ev.pointerId);
     if (!d) return;
     const dx = ev.clientX - d.x;
@@ -212,14 +195,6 @@ function bindInput(): void {
   });
 
   const endPointer = (ev: PointerEvent) => {
-    if (stick?.owns(ev.pointerId)) {
-      stick.end();
-      game?.steer(0, 0);
-      // Kurz aufgetippt statt gezogen? Dann war es doch ein Zielen.
-      if (stickTrack && wasTap(stickTrack)) tapAt(ev.clientX, ev.clientY);
-      stickTrack = null;
-      return;
-    }
     const d = drags.get(ev.pointerId);
     drags.delete(ev.pointerId);
     if (drags.size < 2) pinchStart = null;
@@ -283,10 +258,10 @@ function loop(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (game && renderer && overlay && hud) {
-    // Eingaben relativ zur Kamera in Weltrichtung umrechnen.
+    // Am Rechner lässt sich zusätzlich mit WASD laufen.
     const kb = keyboardVector();
-    const sx = (stick?.x ?? 0) + kb.x;
-    const sy = (stick?.y ?? 0) + kb.y;
+    const sx = kb.x;
+    const sy = kb.y;
     if (Math.hypot(sx, sy) > 0.08) {
       const dir = renderer.screenToWorldDir(sx, sy);
       game.steer(dir.x, dir.y);
