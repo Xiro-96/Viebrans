@@ -25,10 +25,12 @@ im selben Netz sein, und der Port 5173 darf nicht von der Firewall blockiert
 werden. `npm run single` erzeugt eine einzelne HTML-Datei ohne jede weitere
 Abhängigkeit — die lässt sich verschicken oder irgendwo hochladen.
 
-Auf GitHub Pages veröffentlicht der Workflow unter `.github/workflows/pages.yml`
-bei jedem Push. Beim ersten Mal muss Pages einmalig von Hand eingeschaltet
-werden: **Settings → Pages → Source auf „GitHub Actions"**. Das Actions-Token
-darf das nicht selbst anlegen.
+Für GitHub Pages liegt ein Workflow unter `.github/workflows/pages.yml`. Er
+läuft auf `main` und auf Zuruf, setzt aber voraus, dass Pages für das Repo
+eingeschaltet ist: **Settings → Pages → Source: GitHub Actions**. Zwei Hürden
+dabei — das Actions-Token kann Pages nicht selbst anlegen, und für private
+Repos ist Pages kostenpflichtig. Im kostenlosen Tarif muss das Repo also
+öffentlich sein, sonst bietet GitHub die Einstellung gar nicht erst an.
 
 Das Spiel ist eine PWA: über „Zum Startbildschirm hinzufügen" landet es als
 App-Symbol auf dem Handy und startet im Vollbild, auch offline.

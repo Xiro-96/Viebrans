@@ -2,11 +2,12 @@
 # damit man es direkt am Handy im Browser öffnen kann.
 name: Deploy Pages
 
+# Läuft nur auf Zuruf und auf dem Hauptzweig, damit fehlgeschlagene Deploys
+# nicht jeden Push auf einem Entwicklungszweig rot färben.
 on:
   push:
     branches:
       - main
-      - claude/flyff-mobile-game-4f1596
   workflow_dispatch:
 
 permissions:
@@ -34,11 +35,12 @@ jobs:
 
       - run: npm run build
 
-      # enablement aktiviert Pages beim ersten Lauf selbst,
-      # damit die Einstellung nicht von Hand gesetzt werden muss.
+      # Voraussetzung: GitHub Pages ist für das Repo eingeschaltet
+      # (Settings -> Pages -> Source: GitHub Actions). Für private Repos
+      # ist Pages kostenpflichtig — im kostenlosen Tarif muss das Repo
+      # dafür öffentlich sein. Das Actions-Token kann Pages nicht selbst
+      # anlegen, deshalb schlägt dieser Schritt sonst fehl.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
