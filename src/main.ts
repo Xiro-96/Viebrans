@@ -291,7 +291,18 @@ function loop(now: number): void {
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     try {
-      navigator.serviceWorker.register('./sw.js').catch(() => { /* offline optional */ });
+      // Lief hier schon ein Arbeiter? Dann ist ein Wechsel eine Aktualisierung
+      // und die Seite soll sich einmal selbst neu laden.
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || reloading) return;
+        reloading = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => reg.update().catch(() => {}))
+        .catch(() => { /* offline optional */ });
     } catch {
       /* offline optional */
     }
