@@ -218,10 +218,16 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-// Service Worker nur im Produktionsbuild registrieren.
+// Service Worker nur im Produktionsbuild registrieren. In eingebetteten oder
+// sandkastenartigen Kontexten wirft die Registrierung teils sofort — dann läuft
+// das Spiel eben ohne Offline-Zwischenspeicher weiter.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline optional */ });
+    try {
+      navigator.serviceWorker.register('./sw.js').catch(() => { /* offline optional */ });
+    } catch {
+      /* offline optional */
+    }
   });
 }
 

@@ -16,7 +16,19 @@ npm run dev       # Entwicklung, im Handybrowser unter der angezeigten Netzwerka
 npm run build     # Produktionsbundle nach dist/
 npm run preview   # Produktionsbundle lokal ausliefern
 npm run typecheck # nur die Typprüfung
+npm run single    # alles in eine einzelne HTML-Datei packen
 ```
+
+Zum Testen am Handy reicht `npm run dev`: Vite gibt eine Netzwerkadresse aus,
+die im selben WLAN vom Handy aus erreichbar ist. Rechner und Handy müssen dafür
+im selben Netz sein, und der Port 5173 darf nicht von der Firewall blockiert
+werden. `npm run single` erzeugt eine einzelne HTML-Datei ohne jede weitere
+Abhängigkeit — die lässt sich verschicken oder irgendwo hochladen.
+
+Auf GitHub Pages veröffentlicht der Workflow unter `.github/workflows/pages.yml`
+bei jedem Push. Beim ersten Mal muss Pages einmalig von Hand eingeschaltet
+werden: **Settings → Pages → Source auf „GitHub Actions"**. Das Actions-Token
+darf das nicht selbst anlegen.
 
 Das Spiel ist eine PWA: über „Zum Startbildschirm hinzufügen" landet es als
 App-Symbol auf dem Handy und startet im Vollbild, auch offline.
@@ -115,6 +127,7 @@ node smoke.mjs <zielordner>        # Start, Charaktererstellung, alle Menüs
 node progression.mjs <zielordner>  # Kämpfen, Jobwahl, Solo- und Gruppendungeon
 node balance.mjs                   # misst die Levelgeschwindigkeit über eine Stunde Spielzeit
 node shots.mjs <zielordner>        # Bildschirmfotos typischer Spielsituationen
+node verify-single.mjs <datei>    # prüft die Einzeldatei-Fassung (Pfad zur HTML-Datei)
 ```
 
 ## Entwicklerkonsole
