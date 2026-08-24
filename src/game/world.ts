@@ -16,16 +16,18 @@ export interface Zone {
   density: number;
   levelHint: string;
   tint: string;
+  /** Bodenfarbe in der 3D-Ansicht — heller und satter als die Kartentönung. */
+  tint3d: number;
 }
 
 export const ZONES: Zone[] = [
-  { id: 'meadow', name: 'Sonnenwiese', x: 760, y: 620, w: 520, h: 380, monsters: ['slime', 'bunny'], density: 16, levelHint: 'Lv 1–5', tint: '#1e3a2a' },
-  { id: 'grove', name: 'Nebelhain', x: 1560, y: 600, w: 520, h: 400, monsters: ['bunny', 'mush'], density: 16, levelHint: 'Lv 5–9', tint: '#1c3340' },
-  { id: 'steppe', name: 'Wolfssteppe', x: 700, y: 1240, w: 560, h: 420, monsters: ['wolf', 'mush'], density: 15, levelHint: 'Lv 9–13', tint: '#33301c' },
-  { id: 'quarry', name: 'Alter Steinbruch', x: 1600, y: 1250, w: 560, h: 420, monsters: ['golem', 'wisp'], density: 13, levelHint: 'Lv 13–18', tint: '#2a2a33' },
-  { id: 'road', name: 'Räuberpfad', x: 260, y: 820, w: 380, h: 520, monsters: ['bandit', 'wolf'], density: 12, levelHint: 'Lv 18–24', tint: '#3a2418' },
-  { id: 'ashes', name: 'Aschefelder', x: 2180, y: 800, w: 360, h: 560, monsters: ['drake', 'revenant'], density: 12, levelHint: 'Lv 25–38', tint: '#3a1c1c' },
-  { id: 'waste', name: 'Ödland', x: 980, y: 120, w: 700, h: 340, monsters: ['revenant', 'titan'], density: 11, levelHint: 'Lv 38–60', tint: '#231a33' },
+  { id: 'meadow', tint3d: 0x8fd86a, name: 'Sonnenwiese', x: 760, y: 620, w: 520, h: 380, monsters: ['slime', 'bunny'], density: 16, levelHint: 'Lv 1–5', tint: '#1e3a2a' },
+  { id: 'grove', tint3d: 0x6fc4a8, name: 'Nebelhain', x: 1560, y: 600, w: 520, h: 400, monsters: ['bunny', 'mush'], density: 16, levelHint: 'Lv 5–9', tint: '#1c3340' },
+  { id: 'steppe', tint3d: 0xc9bf6a, name: 'Wolfssteppe', x: 700, y: 1240, w: 560, h: 420, monsters: ['wolf', 'mush'], density: 15, levelHint: 'Lv 9–13', tint: '#33301c' },
+  { id: 'quarry', tint3d: 0xa8a5b0, name: 'Alter Steinbruch', x: 1600, y: 1250, w: 560, h: 420, monsters: ['golem', 'wisp'], density: 13, levelHint: 'Lv 13–18', tint: '#2a2a33' },
+  { id: 'road', tint3d: 0xc79a68, name: 'Räuberpfad', x: 260, y: 820, w: 380, h: 520, monsters: ['bandit', 'wolf'], density: 12, levelHint: 'Lv 18–24', tint: '#3a2418' },
+  { id: 'ashes', tint3d: 0xc98a72, name: 'Aschefelder', x: 2180, y: 800, w: 360, h: 560, monsters: ['drake', 'revenant'], density: 12, levelHint: 'Lv 25–38', tint: '#3a1c1c' },
+  { id: 'waste', tint3d: 0x9a8ac4, name: 'Ödland', x: 980, y: 120, w: 700, h: 340, monsters: ['revenant', 'titan'], density: 11, levelHint: 'Lv 38–60', tint: '#231a33' },
 ];
 
 export function zoneAt(x: number, y: number): Zone | null {

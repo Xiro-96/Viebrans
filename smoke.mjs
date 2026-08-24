@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
 const OUT = process.argv[2];
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const ctx = await browser.newContext({
   viewport: { width: 412, height: 892 },
   deviceScaleFactor: 2,

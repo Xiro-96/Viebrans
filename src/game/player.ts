@@ -3,6 +3,7 @@ import { derive, skillPointsForLevel, summarizeGear, xpToNext } from './formulas
 import { availableSkills, SKILL_BY_ID } from './skills';
 import { itemScore, sellValue, SLOT_ORDER, startingGear, upgradeChance, upgradeCost } from './items';
 import { chance } from './rng';
+import { MOUNT_BY_ID } from './mounts';
 import type { BotRecord } from './bots';
 import type { ClassId, CombatStats, EquipSlot, Item, SpecId, Stats } from './types';
 
@@ -28,6 +29,10 @@ export interface SaveData {
   lastSeen: number;
   playtime: number;
   kills: number;
+  /** Gekaufte Reittiere. */
+  mounts: string[];
+  /** Aufgesessenes Reittier, null = zu Fuß. */
+  activeMount: string | null;
 }
 
 export function createSave(name: string, classId: ClassId, bots: BotRecord[]): SaveData {
@@ -49,6 +54,8 @@ export function createSave(name: string, classId: ClassId, bots: BotRecord[]): S
     lastSeen: Date.now(),
     playtime: 0,
     kills: 0,
+    mounts: [],
+    activeMount: null,
   };
   for (const item of startingGear(classId)) equip(save, item);
   // Die erste Fertigkeit ist von Anfang an gelernt und belegt.
@@ -216,6 +223,19 @@ export function equipBest(save: SaveData): number {
     }
   }
   return changed;
+}
+
+/** Kauft ein Reittier, sofern Level und Gold reichen. */
+export function buyMount(save: SaveData, id: string): { ok: boolean; reason?: string } {
+  const def = MOUNT_BY_ID[id];
+  if (!def) return { ok: false, reason: 'Unbekanntes Reittier.' };
+  if (save.mounts.includes(id)) return { ok: false, reason: 'Besitzt du bereits.' };
+  if (save.level < def.reqLevel) return { ok: false, reason: `Level ${def.reqLevel} nötig.` };
+  if (save.gold < def.price) return { ok: false, reason: `${def.price.toLocaleString('de-DE')} Gold nötig.` };
+  save.gold -= def.price;
+  save.mounts.push(id);
+  if (!save.activeMount) save.activeMount = id;
+  return { ok: true };
 }
 
 export function specName(save: SaveData): string {

@@ -83,6 +83,8 @@ export interface Actor {
   level: number;
   x: number;
   y: number;
+  /** Höhe über dem Boden. 0 = am Boden, darüber wird geflogen. */
+  alt: number;
   vx: number;
   vy: number;
   facing: number;
@@ -96,6 +98,8 @@ export interface Actor {
   targetId: string | null;
   /** Ziel des Laufwegs. */
   moveTo: { x: number; y: number } | null;
+  /** Dauerhafte Laufrichtung vom Steuerknüppel; hat Vorrang vor moveTo. */
+  moveDir: { x: number; y: number } | null;
   attackCd: number;
   gcd: number;
   effects: StatusEffect[];
@@ -118,6 +122,12 @@ export interface Actor {
   threat?: Record<string, number>;
   /** Sichtbare Wirkanimation. */
   castFx?: { t: number; kind: string; x: number; y: number; r: number };
+  /** Aufgesessenes Reittier, falls vorhanden. */
+  mountId?: string | null;
+  /** Steigen (1), sinken (-1) oder Höhe halten (0). */
+  climb?: number;
+  /** Wie weit die Figur gerade läuft — treibt die Laufanimation. */
+  stride?: number;
 }
 
 export interface BotAI {

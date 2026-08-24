@@ -2,11 +2,16 @@ import { MAX_LEVEL } from '../game/classes';
 import { xpToNext } from '../game/formulas';
 import { SKILL_BY_ID } from '../game/skills';
 import { onlineCount } from '../game/bots';
+import type { MountStyle } from '../game/mounts';
 import { areaName } from '../game/world';
 import * as P from '../game/player';
 import type { Game } from '../game/engine';
 import { clear, el, fmt, tap } from './dom';
 import type { TabId } from './panels';
+
+const MOUNT_ICON: Record<MountStyle, string> = {
+  beast: '🐗', broom: '🧹', board: '🛹', wings: '🦅',
+};
 
 export class Hud {
   root: HTMLElement;
@@ -25,6 +30,10 @@ export class Hud {
   private lastQuickbar = '';
   private lastChatLen = -1;
   private lastNoticeLen = -1;
+  private mountBtn!: HTMLElement;
+  private upBtn!: HTMLButtonElement;
+  private downBtn!: HTMLButtonElement;
+  private sideBtns!: HTMLElement;
 
   constructor(private game: Game, private onNav: (tab: TabId) => void) {
     this.nameRow = el('div', { class: 'namerow' });
@@ -32,7 +41,7 @@ export class Hud {
     this.mpBar = el('i');
     this.xpBar = el('i');
     this.hudMeta = el('div', { class: 'hudmeta' });
-    const topLeft = el('div', { class: 'top-left' }, [
+    const topLeft = el('div', { class: 'top-left brassbox' }, [
       this.nameRow,
       el('div', { class: 'bar hp' }, [this.hpBar]),
       el('div', { class: 'bar mp' }, [this.mpBar]),
@@ -41,7 +50,7 @@ export class Hud {
     ]);
 
     this.chips = el('div', { class: 'top-right' });
-    this.targetFrame = el('div', { class: 'target-frame' });
+    this.targetFrame = el('div', { class: 'target-frame brassbox' });
     this.noticeBox = el('div', { class: 'notices' });
     this.ticker = el('div', { class: 'chat-ticker' });
     this.skillBar = el('div', { class: 'skills' });
@@ -57,8 +66,30 @@ export class Hud {
       this.navBar.append(b);
     }
 
+    this.mountBtn = el('button', { class: 'round', title: 'Reittier' }, [el('span', { text: '🐗' })]);
+    this.upBtn = el('button', { class: 'round small', title: 'Steigen' }, [el('span', { text: '▲' })]);
+    this.downBtn = el('button', { class: 'round small', title: 'Sinken' }, [el('span', { text: '▼' })]);
+    tap(this.mountBtn, () => {
+      const err = this.game.toggleMount();
+      if (err) this.game.notify(err, 'bad');
+    });
+    // Gedrückt halten steigt, loslassen hält die Höhe.
+    const hold = (node: HTMLElement, dir: -1 | 1) => {
+      const set = (d: -1 | 0 | 1) => {
+        const err = this.game.setClimb(d);
+        if (err && d !== 0) this.game.notify(err, 'bad');
+      };
+      node.addEventListener('pointerdown', (ev) => { ev.preventDefault(); set(dir); });
+      for (const e of ['pointerup', 'pointercancel', 'pointerleave']) {
+        node.addEventListener(e, () => set(0));
+      }
+    };
+    hold(this.upBtn, 1);
+    hold(this.downBtn, -1);
+    this.sideBtns = el('div', { class: 'sidebtns' }, [this.upBtn, this.downBtn, this.mountBtn]);
+
     this.root = el('div', { class: 'hud' }, [
-      topLeft, this.chips, this.targetFrame, this.noticeBox, this.ticker,
+      topLeft, this.chips, this.targetFrame, this.noticeBox, this.ticker, this.sideBtns,
       el('div', { class: 'actionbar' }, [this.skillBar, this.navBar]),
     ]);
     this.buildSkillBar();
@@ -99,8 +130,15 @@ export class Hud {
     // Kopfzeile
     clear(this.nameRow);
     this.nameRow.append(
-      el('span', { text: save.name }),
-      el('small', { text: `Lv ${save.level} ${P.specName(save)}` }),
+      el('div', {
+        class: 'portrait',
+        style: `background:${P.classColor(save)}`,
+        text: save.name.slice(0, 1).toUpperCase(),
+      }),
+      el('div', { class: 'namecol' }, [
+        el('div', { class: 'nm', text: save.name }),
+        el('div', { class: 'cl', text: `Lv ${save.level} · ${P.specName(save)}` }),
+      ]),
     );
     this.hpBar.style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
     this.mpBar.style.width = `${Math.max(0, (p.mp / Math.max(1, p.maxMp)) * 100)}%`;
@@ -116,16 +154,22 @@ export class Hud {
     clear(this.chips);
     const v = P.view(save);
     this.chips.append(
-      el('div', { class: 'chip' }, [el('b', { text: fmt(save.gold) }), ' Gold']),
-      el('div', { class: 'chip' }, [el('b', { text: String(v.gearScore) }), ' Gear-Score']),
-      el('div', { class: 'chip' }, [
+      el('div', { class: 'chip brassbox' }, [el('b', { text: fmt(save.gold) }), ' Gold']),
+      el('div', { class: 'chip brassbox' }, [el('b', { text: String(v.gearScore) }), ' GS']),
+      el('div', { class: 'chip brassbox' }, [
         el('span', { class: 'on', text: '● ' }),
         el('b', { text: String(onlineCount(save.bots)) }), ' online',
       ]),
-      el('div', { class: 'chip', text: g.scene === 'dungeon' && g.dungeon ? g.dungeon.def.name : areaName(p.x, p.y) }),
+      el('div', { class: 'chip brassbox', text: g.scene === 'dungeon' && g.dungeon ? g.dungeon.def.name : areaName(p.x, p.y) }),
     );
     if (save.skillPoints > 0) {
-      this.chips.append(el('div', { class: 'chip' }, [el('b', { text: `+${save.skillPoints}` }), ' Fertigkeitspunkte']));
+      this.chips.append(el('div', { class: 'chip brassbox' }, [el('b', { text: `+${save.skillPoints}` }), ' Punkte']));
+    }
+
+    if (p.alt > 0) {
+      this.chips.append(el('div', { class: 'chip brassbox' }, [
+        el('b', { text: `${Math.round(p.alt)} m` }), ' Höhe',
+      ]));
     }
 
     // Zielfenster
@@ -164,6 +208,19 @@ export class Hud {
         ]));
       }
     }
+
+    // Reiten und Fliegen
+    const mountDef = g.mount;
+    const canRide = !!mountDef && g.scene === 'world';
+    this.sideBtns.style.display = save.mounts.length && g.scene === 'world' ? 'flex' : 'none';
+    this.mountBtn.dataset.on = g.mounted ? '1' : '0';
+    (this.mountBtn as HTMLButtonElement).disabled = !canRide && !g.mounted;
+    this.mountBtn.textContent = mountDef ? MOUNT_ICON[mountDef.style] : '🐗';
+    const canFly = g.mounted && !!mountDef?.canFly;
+    this.upBtn.disabled = !canFly || p.alt >= (mountDef?.ceiling ?? 0);
+    this.downBtn.disabled = !canFly || p.alt <= 0;
+    this.upBtn.dataset.on = canFly && (p.climb ?? 0) > 0 ? '1' : '0';
+    this.downBtn.dataset.on = canFly && (p.climb ?? 0) < 0 ? '1' : '0';
 
     // Fertigkeitenleiste
     for (let i = 0; i < this.skillNodes.length; i++) {
