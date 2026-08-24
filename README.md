@@ -156,6 +156,8 @@ spielen es durch. Vorher muss `npm run build && npm run preview` laufen.
 
 ```bash
 node smoke.mjs <zielordner>        # Start, Charaktererstellung, alle Menüs
+node sw-update-test.mjs           # prüft, dass eine neue Veröffentlichung beim
+                                  # bereits installierten Service Worker ankommt
 node progression.mjs <zielordner>  # Kämpfen, Jobwahl, Solo- und Gruppendungeon
 node balance.mjs                   # misst die Levelgeschwindigkeit über eine Stunde Spielzeit
 node shots.mjs <zielordner>        # Bildschirmfotos typischer Spielsituationen
