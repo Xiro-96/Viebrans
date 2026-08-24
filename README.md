@@ -45,6 +45,7 @@ App-Symbol auf dem Handy und startet im Vollbild, auch offline.
 - **Linke Bildschirmhälfte unten**: dort, wo der Daumen aufsetzt, erscheint der Steuerknüppel.
 - **Rechte Seite wischen** dreht die Kamera, **zwei Finger** zoomen.
 - **Kurz tippen** visiert einen Gegner an oder schickt den Helden zu einem Punkt.
+- Der Knopf **🎯** rechts schaltet auf den nächsten Gegner weiter, ganz ohne Zielen.
 - Die sechs Felder unten sind die Fertigkeitenleiste.
 - Die runden Knöpfe rechts: aufsitzen und absteigen, darüber steigen und sinken.
 - Am Rechner: `W A S D` laufen, `1`–`6` Fertigkeiten, `Tab` zielt, `M` aufsitzen, `R`/`F` steigen und sinken.
@@ -158,6 +159,9 @@ spielen es durch. Vorher muss `npm run build && npm run preview` laufen.
 node smoke.mjs <zielordner>        # Start, Charaktererstellung, alle Menüs
 node sw-update-test.mjs           # prüft, dass eine neue Veröffentlichung beim
                                   # bereits installierten Service Worker ankommt
+node steering-test.mjs            # Knüppelrichtung gegen die Bildschirmbewegung,
+                                  # bei fünf Kamerawinkeln — findet Spiegelungen
+node tap-test.mjs                 # Gegner antippen, mit realistischem Zittern
 node progression.mjs <zielordner>  # Kämpfen, Jobwahl, Solo- und Gruppendungeon
 node balance.mjs                   # misst die Levelgeschwindigkeit über eine Stunde Spielzeit
 node shots.mjs <zielordner>        # Bildschirmfotos typischer Spielsituationen

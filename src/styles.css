@@ -357,3 +357,6 @@ canvas#plates { pointer-events: none; }
   z-index: 60; animation: fadein .15s ease; max-width: 86vw; text-align: center;
   box-shadow: var(--glow);
 }
+
+/* Der Zielknopf sitzt unterhalb der Reitknöpfe und ist immer erreichbar. */
+.sidebtns.targetcol { bottom: calc(88px + var(--safe-b)); }

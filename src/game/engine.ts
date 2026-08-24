@@ -1061,6 +1061,26 @@ export class Game {
     this.player.moveTo = { x, y };
   }
 
+  /**
+   * Schaltet auf den nächsten Gegner weiter. Auf einem Handy trifft man
+   * kleine Ziele schlecht — deshalb gibt es diesen Weg ganz ohne Zielen.
+   */
+  cycleTarget(): boolean {
+    const p = this.player;
+    const airborne = this.isFlying(p);
+    const list = this.actors
+      .filter((a) => a.team === 1 && !a.dead && this.isFlying(a) === airborne)
+      .map((a) => ({ a, d: Math.hypot(a.x - p.x, a.y - p.y) }))
+      .filter((e) => e.d < 460)
+      .sort((x, y) => x.d - y.d)
+      .map((e) => e.a);
+    if (!list.length) return false;
+    const idx = list.findIndex((a) => a.id === p.targetId);
+    p.targetId = list[(idx + 1) % list.length].id;
+    p.moveDir = null;
+    return true;
+  }
+
   /** Laufrichtung setzen; (0,0) hält an. */
   steer(x: number, y: number): void {
     if (this.player.dead) return;

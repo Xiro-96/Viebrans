@@ -115,6 +115,25 @@ export class Renderer3D {
     return { x: -Math.sin(this.yaw), y: -Math.cos(this.yaw) };
   }
 
+  /**
+   * Rechnet einen Knüppelausschlag in eine Weltrichtung um.
+   *
+   * `sx` ist der Ausschlag nach rechts, `sy` der nach unten (Bildschirmachsen).
+   * "Rechts auf dem Bildschirm" ist das Kreuzprodukt aus Blickrichtung und
+   * Oben: bei Blick (fx, 0, fz) ergibt das (-fz, 0, fx). Ein Vorzeichenfehler
+   * an dieser Stelle spiegelt die gesamte Steuerung, deshalb prüft
+   * steering-test.mjs das Ergebnis gegen die tatsächliche Bildschirmbewegung.
+   */
+  screenToWorldDir(sx: number, sy: number): { x: number; y: number } {
+    const f = this.forward;
+    const rightX = -f.y;
+    const rightY = f.x;
+    return {
+      x: f.x * -sy + rightX * sx,
+      y: f.y * -sy + rightY * sx,
+    };
+  }
+
   // ---------------------------------------------------------------- Auswahl
 
   /**
@@ -122,20 +141,24 @@ export class Renderer3D {
    * robuster als Strahlen gegen unregelmäßige Körper.
    */
   pick(game: Game, sx: number, sy: number): Pick {
+    // Fingerkuppen sind ungenau: großzügig zielen und Gegner bevorzugen.
+    const REACH = 78;
     let best: string | undefined;
-    let bestD = 60;
+    let bestScore = Infinity;
     const v = new THREE.Vector3();
     for (const a of game.actors) {
       if (a === game.player || a.dead || a.kind === 'npc') continue;
       if (game.isFlying(a) !== game.isFlying(game.player)) continue;
-      const view = this.views.get(a.id);
-      if (!view) continue;
+      if (!this.views.has(a.id)) continue;
       v.set(a.x, this.groundY(a.x, a.y) + a.alt + a.radius, a.y).project(this.camera);
       if (v.z > 1) continue;
       const px = (v.x * 0.5 + 0.5) * this.width;
       const py = (-v.y * 0.5 + 0.5) * this.height;
       const d = Math.hypot(px - sx, py - sy);
-      if (d < bestD) { bestD = d; best = a.id; }
+      if (d > REACH) continue;
+      // Verbündete zählen nur, wenn kein Gegner in Reichweite ist.
+      const score = d + (a.team === 0 ? 400 : 0);
+      if (score < bestScore) { bestScore = score; best = a.id; }
     }
     if (best) return { actorId: best };
 
@@ -156,6 +179,13 @@ export class Renderer3D {
     out.x = (out.x * 0.5 + 0.5) * this.width;
     out.y = (-out.y * 0.5 + 0.5) * this.height;
     return true;
+  }
+
+  /** Bildschirmposition einer Bodenstelle — vom Steuerungstest genutzt. */
+  screenOf(x: number, z: number): { x: number; y: number } {
+    const v = new THREE.Vector3();
+    this.project(x, 0, z, v);
+    return { x: v.x, y: v.y };
   }
 
   groundY(x: number, z: number): number {

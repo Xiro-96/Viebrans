@@ -34,6 +34,8 @@ export class Hud {
   private upBtn!: HTMLButtonElement;
   private downBtn!: HTMLButtonElement;
   private sideBtns!: HTMLElement;
+  private targetBtn!: HTMLElement;
+  private targetCol!: HTMLElement;
 
   constructor(private game: Game, private onNav: (tab: TabId) => void) {
     this.nameRow = el('div', { class: 'namerow' });
@@ -66,6 +68,10 @@ export class Hud {
       this.navBar.append(b);
     }
 
+    this.targetBtn = el('button', { class: 'round', title: 'Nächstes Ziel' }, [el('span', { text: '🎯' })]);
+    tap(this.targetBtn, () => {
+      if (!this.game.cycleTarget()) this.game.notify('Kein Gegner in der Nähe.', 'bad');
+    });
     this.mountBtn = el('button', { class: 'round', title: 'Reittier' }, [el('span', { text: '🐗' })]);
     this.upBtn = el('button', { class: 'round small', title: 'Steigen' }, [el('span', { text: '▲' })]);
     this.downBtn = el('button', { class: 'round small', title: 'Sinken' }, [el('span', { text: '▼' })]);
@@ -87,9 +93,12 @@ export class Hud {
     hold(this.upBtn, 1);
     hold(this.downBtn, -1);
     this.sideBtns = el('div', { class: 'sidebtns' }, [this.upBtn, this.downBtn, this.mountBtn]);
+    // Der Zielknopf steht immer bereit, auch ohne Reittier.
+    this.targetCol = el('div', { class: 'sidebtns targetcol' }, [this.targetBtn]);
 
     this.root = el('div', { class: 'hud' }, [
-      topLeft, this.chips, this.targetFrame, this.noticeBox, this.ticker, this.sideBtns,
+      topLeft, this.chips, this.targetFrame, this.noticeBox, this.ticker,
+      this.sideBtns, this.targetCol,
       el('div', { class: 'actionbar' }, [this.skillBar, this.navBar]),
     ]);
     this.buildSkillBar();

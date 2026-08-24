@@ -134,35 +134,71 @@ function persist(): void {
 }
 
 function bindInput(): void {
-  /** Zeiger, die gerade die Kamera drehen. */
-  const drags = new Map<number, { x: number; y: number; moved: number }>();
+  /**
+   * Ein Tipp gilt, wenn der Finger nah am Aufsetzpunkt bleibt und schnell
+   * wieder loslässt. Entscheidend ist der Abstand zum Startpunkt — die
+   * zurückgelegte Strecke zu summieren zählt jedes Zittern mit und verschluckt
+   * dadurch fast jeden Tipp.
+   */
+  const TAP_SLOP = 22;
+  const TAP_TIME = 400;
+
+  interface Track { x0: number; y0: number; x: number; y: number; far: number; t0: number }
+  const drags = new Map<number, Track>();
+  /** Auch der Knüppelfinger kann noch ein Tipp werden. */
+  let stickTrack: Track | null = null;
   let pinchStart: number | null = null;
 
+  const track = (ev: PointerEvent): Track =>
+    ({ x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY, far: 0, t0: performance.now() });
+
+  const advance = (t: Track, x: number, y: number) => {
+    t.x = x;
+    t.y = y;
+    t.far = Math.max(t.far, Math.hypot(x - t.x0, y - t.y0));
+  };
+
+  const wasTap = (t: Track) => t.far < TAP_SLOP && performance.now() - t.t0 < TAP_TIME;
+
+  const tapAt = (x: number, y: number) => {
+    if (!game || !renderer) return;
+    const rect = canvas.getBoundingClientRect();
+    const hit = renderer.pick(game, x - rect.left, y - rect.top);
+    if (hit.actorId) {
+      game.player.targetId = hit.actorId;
+      game.player.moveDir = null;
+    } else if (hit.ground) {
+      game.tapWorld(hit.ground.x, hit.ground.y);
+    }
+  };
+
+  // Die Knüppelzone reicht nur noch über das untere Viertel links — darüber
+  // lässt sich überall zielen.
   const isStickZone = (x: number, y: number) =>
-    x < window.innerWidth * 0.46 && y > window.innerHeight * 0.34;
+    x < window.innerWidth * 0.42 && y > window.innerHeight * 0.58;
 
   canvas.addEventListener('pointerdown', (ev) => {
     if (panels?.open) return;
     canvas.setPointerCapture(ev.pointerId);
     if (stick && !stick.active && isStickZone(ev.clientX, ev.clientY)) {
       stick.start(ev.pointerId, ev.clientX, ev.clientY);
+      stickTrack = track(ev);
       return;
     }
-    drags.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moved: 0 });
+    drags.set(ev.pointerId, track(ev));
   });
 
   canvas.addEventListener('pointermove', (ev) => {
     if (stick?.owns(ev.pointerId)) {
       stick.move(ev.clientX, ev.clientY);
+      if (stickTrack) advance(stickTrack, ev.clientX, ev.clientY);
       return;
     }
     const d = drags.get(ev.pointerId);
     if (!d) return;
     const dx = ev.clientX - d.x;
     const dy = ev.clientY - d.y;
-    d.moved += Math.abs(dx) + Math.abs(dy);
-    d.x = ev.clientX;
-    d.y = ev.clientY;
+    advance(d, ev.clientX, ev.clientY);
 
     if (drags.size >= 2) {
       // Zwei Finger: Abstand steuert den Zoom.
@@ -179,22 +215,15 @@ function bindInput(): void {
     if (stick?.owns(ev.pointerId)) {
       stick.end();
       game?.steer(0, 0);
+      // Kurz aufgetippt statt gezogen? Dann war es doch ein Zielen.
+      if (stickTrack && wasTap(stickTrack)) tapAt(ev.clientX, ev.clientY);
+      stickTrack = null;
       return;
     }
     const d = drags.get(ev.pointerId);
     drags.delete(ev.pointerId);
     if (drags.size < 2) pinchStart = null;
-    // Ein kurzer Tipp ohne Wischen wählt ein Ziel oder ein Laufziel.
-    if (d && d.moved < 12 && game && renderer) {
-      const rect = canvas.getBoundingClientRect();
-      const hit = renderer.pick(game, ev.clientX - rect.left, ev.clientY - rect.top);
-      if (hit.actorId) {
-        game.player.targetId = hit.actorId;
-        game.player.moveDir = null;
-      } else if (hit.ground) {
-        game.tapWorld(hit.ground.x, hit.ground.y);
-      }
-    }
+    if (d && wasTap(d)) tapAt(ev.clientX, ev.clientY);
   };
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
@@ -259,10 +288,8 @@ function loop(now: number): void {
     const sx = (stick?.x ?? 0) + kb.x;
     const sy = (stick?.y ?? 0) + kb.y;
     if (Math.hypot(sx, sy) > 0.08) {
-      const f = renderer.forward;
-      const rx = f.y;
-      const ry = -f.x;
-      game.steer(f.x * -sy + rx * sx, f.y * -sy + ry * sx);
+      const dir = renderer.screenToWorldDir(sx, sy);
+      game.steer(dir.x, dir.y);
     } else {
       game.steer(0, 0);
     }
