@@ -3,6 +3,7 @@ import { itemPower, RARITY, xpToNext } from '../game/formulas';
 import { SLOT_NAMES, SLOT_ORDER, sellValue, upgradeChance, upgradeCost } from '../game/items';
 import { availableSkills, rankPower, skillsFor } from '../game/skills';
 import { checkLock, DUNGEONS } from '../game/dungeons';
+import { MOUNTS, type MountStyle } from '../game/mounts';
 import { leaderboard, onlineCount } from '../game/bots';
 import * as P from '../game/player';
 import type { Game } from '../game/engine';
@@ -10,6 +11,10 @@ import type { Item, SpecId } from '../game/types';
 import { clear, el, fmt, tap, toast } from './dom';
 
 export type TabId = 'hero' | 'bag' | 'skills' | 'dungeon' | 'social';
+
+const MOUNT_EMOJI: Record<MountStyle, string> = {
+  beast: '🐗', broom: '🧹', board: '🛹', wings: '🦅',
+};
 
 const TAB_LABEL: Record<TabId, string> = {
   hero: 'Held',
@@ -27,6 +32,7 @@ export class Panels {
   private current: TabId = 'hero';
   open = false;
   private socialTab: 'chat' | 'rangliste' | 'online' = 'chat';
+  private heroTab: 'werte' | 'ausruestung' | 'stall' = 'werte';
 
   constructor(private game: Game, private onChange: () => void) {
     this.body = el('div', { class: 'sheet-body' });
@@ -73,6 +79,7 @@ export class Panels {
     clear(this.tabsBar);
     clear(this.body);
     if (this.current === 'social') this.renderSocialTabs();
+    if (this.current === 'hero') this.renderHeroTabs();
     switch (this.current) {
       case 'hero': this.renderHero(); break;
       case 'bag': this.renderBag(); break;
@@ -86,7 +93,21 @@ export class Panels {
 
   // ------------------------------------------------------------------ Held
 
+  private renderHeroTabs(): void {
+    const opts: [typeof this.heroTab, string][] = [
+      ['werte', 'Werte'], ['ausruestung', 'Ausrüstung'], ['stall', 'Stall'],
+    ];
+    for (const [id, label] of opts) {
+      const b = el('button', { class: 'tab', 'data-sel': this.heroTab === id ? '1' : '0', text: label });
+      tap(b, () => { this.heroTab = id; this.render(); });
+      this.tabsBar.append(b);
+    }
+  }
+
   private renderHero(): void {
+    if (this.heroTab === 'ausruestung') return this.renderEquipment();
+    if (this.heroTab === 'stall') return this.renderStable();
+
     const save = this.save;
     const v = P.view(save);
     const cls = CLASSES[save.classId];
@@ -141,7 +162,11 @@ export class Panels {
       ]),
     );
 
-    this.body.append(el('div', { class: 'section-title', text: 'Ausrüstung' }));
+  }
+
+  private renderEquipment(): void {
+    const save = this.save;
+    this.body.append(el('div', { class: 'section-title', text: 'Getragene Ausrüstung' }));
     for (const slot of SLOT_ORDER) {
       const item = save.equipped[slot];
       const actions: HTMLElement[] = [];
@@ -180,6 +205,71 @@ export class Panels {
         el('div', { class: 'actions' }, actions),
       ]));
     }
+  }
+
+  /** Der Stall: Reittiere kaufen und auswählen. Fliegen ist das Herzstück. */
+  private renderStable(): void {
+    const save = this.save;
+    this.body.append(el('div', {
+      class: 'section-title',
+      text: `Stallmeister · ${fmt(save.gold)} Gold`,
+    }));
+
+    for (const m of MOUNTS) {
+      const owned = save.mounts.includes(m.id);
+      const active = save.activeMount === m.id;
+      const actions: HTMLElement[] = [];
+
+      if (owned) {
+        const use = el('button', {
+          class: `mini ${active ? '' : 'primary'}`,
+          text: active ? 'Gewählt' : 'Wählen',
+        }) as HTMLButtonElement;
+        use.disabled = active;
+        tap(use, () => {
+          save.activeMount = m.id;
+          // Ein Wechsel im Sattel setzt den Helden auf das neue Tier.
+          if (this.game.mounted) this.game.player.mountId = m.id;
+          this.onChange();
+          this.render();
+        });
+        actions.push(use);
+      } else {
+        const buy = el('button', {
+          class: 'mini primary',
+          text: `${fmt(m.price)} g`,
+        }) as HTMLButtonElement;
+        buy.disabled = save.level < m.reqLevel || save.gold < m.price;
+        tap(buy, () => {
+          const res = P.buyMount(save, m.id);
+          if (!res.ok) { toast(res.reason ?? 'Nicht möglich'); return; }
+          toast(`${m.name} gekauft!`);
+          this.game.notify(`${m.name} steht bereit.`, 'good');
+          this.onChange();
+          this.render();
+        });
+        actions.push(buy);
+      }
+
+      const flight = m.canFly
+        ? `Fliegt · Tempo ×${m.flySpeed.toFixed(1)} · Gipfelhöhe ${m.ceiling} m`
+        : 'Bleibt am Boden';
+      this.body.append(el('div', { class: 'row' }, [
+        el('div', { class: 'grow' }, [
+          el('div', { class: 't1', text: `${MOUNT_EMOJI[m.style]} ${m.name}${active ? ' ★' : ''}` }),
+          el('div', { class: 't2', text: m.blurb }),
+          el('div', { class: 't2', text: `Lv ${m.reqLevel}+ · Boden ×${m.groundSpeed.toFixed(2)} · ${flight}` }),
+          owned || save.level >= m.reqLevel ? null
+            : el('div', { class: 't2', style: 'color:#e8553f', text: `Level ${m.reqLevel} nötig` }),
+        ]),
+        el('div', { class: 'actions' }, actions),
+      ]));
+    }
+
+    this.body.append(el('div', {
+      class: 'empty-hint',
+      text: 'Aufsitzen und absteigen über den runden Knopf rechts unten. Mit einem Flugtier steigst du über die Pfeiltasten daneben auf — oben bist du schneller und für Bodengegner unerreichbar, kannst aber selbst nicht kämpfen.',
+    }));
   }
 
   private confirmSpec(specId: SpecId): void {

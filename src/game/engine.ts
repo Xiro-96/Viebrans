@@ -5,6 +5,7 @@ import { rankPower, SKILL_BY_ID } from './skills';
 import { rollLoot } from './items';
 import { chance, pick, rng } from './rng';
 import { bestZoneFor, inTown, TOWN, WORLD_H, WORLD_W, ZONES, type Zone } from './world';
+import { FLIGHT_THRESHOLD, MOUNT_BY_ID, type MountDef } from './mounts';
 import {
   DUNGEON_BOSS_Y, DUNGEON_ENTRANCE_Y, DUNGEON_H, DUNGEON_W, DUNGEON_WAVE_GAP, type DungeonDef,
 } from './dungeons';
@@ -28,11 +29,11 @@ function nextId(prefix: string): string {
 
 function baseActor(partial: Partial<Actor> & Pick<Actor, 'id' | 'kind' | 'name' | 'level' | 'x' | 'y' | 'cs' | 'team'>): Actor {
   return {
-    vx: 0, vy: 0, facing: 0,
+    alt: 0, vx: 0, vy: 0, facing: 0, climb: 0, stride: 0, mountId: null,
     hp: partial.cs.maxHp, maxHp: partial.cs.maxHp,
     mp: partial.cs.maxMp, maxMp: partial.cs.maxMp,
     dead: false, respawnAt: 0, radius: 12,
-    targetId: null, moveTo: null,
+    targetId: null, moveTo: null, moveDir: null,
     attackCd: 0, gcd: 0, effects: [],
     skillCd: {},
     ...partial,
@@ -251,6 +252,62 @@ export class Game {
     return !!party && (party.includes(a.id) || party.includes(b.id));
   }
 
+  /** Fliegt diese Figur gerade — also außer Reichweite des Bodenkampfs? */
+  isFlying(a: Actor): boolean {
+    return a.alt >= FLIGHT_THRESHOLD;
+  }
+
+  get mount(): MountDef | null {
+    return this.save.activeMount ? MOUNT_BY_ID[this.save.activeMount] ?? null : null;
+  }
+
+  get mounted(): boolean {
+    return !!this.player.mountId;
+  }
+
+  /** Sitzt auf oder steigt ab. Im Flug wird zuerst gelandet. */
+  toggleMount(): string | null {
+    const p = this.player;
+    if (p.dead) return 'Du bist besiegt.';
+    if (p.mountId) {
+      if (p.alt > 0) return 'Lande erst, bevor du absteigst.';
+      p.mountId = null;
+      p.climb = 0;
+      this.notify('Abgestiegen.', 'info');
+      return null;
+    }
+    const def = this.mount;
+    if (!def) return 'Du besitzt kein Reittier. Schau beim Stallmeister vorbei.';
+    if (this.scene === 'dungeon') return 'In Instanzen darfst du nicht reiten.';
+    if (p.targetId && !this.actorById(p.targetId)?.dead) p.targetId = null;
+    p.mountId = def.id;
+    this.notify(`${def.name} gerufen.`, 'good');
+    return null;
+  }
+
+  /** Steigt, sinkt oder hält die Höhe. */
+  setClimb(dir: -1 | 0 | 1): string | null {
+    const p = this.player;
+    if (!p.mountId) return 'Dafür brauchst du ein Reittier.';
+    const def = MOUNT_BY_ID[p.mountId];
+    if (!def?.canFly) return `${def?.name ?? 'Dieses Reittier'} kann nicht fliegen.`;
+    p.climb = dir;
+    return null;
+  }
+
+  private updateAltitude(a: Actor, dt: number): void {
+    const def = a.mountId ? MOUNT_BY_ID[a.mountId] : null;
+    if (!def?.canFly) {
+      // Ohne Flugtier sinkt man zügig zu Boden.
+      if (a.alt > 0) a.alt = Math.max(0, a.alt - 260 * dt);
+      return;
+    }
+    const dir = a.climb ?? 0;
+    if (dir > 0) a.alt = Math.min(def.ceiling, a.alt + def.climb * dt);
+    else if (dir < 0) a.alt = Math.max(0, a.alt - def.climb * 1.25 * dt);
+    if (a.alt === 0 && dir < 0) a.climb = 0;
+  }
+
   private mods(a: Actor): Record<string, number> {
     const m: Record<string, number> = {};
     for (const e of a.effects) {
@@ -264,7 +321,11 @@ export class Game {
   }
 
   private enemies(a: Actor): Actor[] {
-    return this.actors.filter((o) => !o.dead && o.team !== a.team && o.kind !== 'npc');
+    // Wer fliegt, ist für Bodengegner weder Ziel noch Angreifer.
+    const airborne = this.isFlying(a);
+    return this.actors.filter(
+      (o) => !o.dead && o.team !== a.team && o.kind !== 'npc' && this.isFlying(o) === airborne,
+    );
   }
 
   private nearest(a: Actor, list: Actor[], maxDist: number): Actor | null {
@@ -404,6 +465,7 @@ export class Game {
     const rank = this.save.skillRanks[skillId] ?? 0;
     if (rank < 1) return 'Noch nicht gelernt.';
     if (this.player.dead) return 'Du bist besiegt.';
+    if (this.isFlying(this.player)) return 'Im Flug kannst du nicht kämpfen.';
     if (!this.skillReady(this.player, skillId)) return null;
     if (this.player.mp < skill.mp) return 'Nicht genug MP.';
     const target = this.actorById(this.player.targetId);
@@ -524,6 +586,7 @@ export class Game {
         for (const k of Object.keys(a.skillCd)) a.skillCd[k] = Math.max(0, a.skillCd[k] - dt);
       }
       this.regen(a, dt);
+      this.updateAltitude(a, dt);
       if (a.kind === 'monster') this.monsterAI(a, dt);
       else if (a.kind === 'bot') this.botAI(a, dt);
       this.move(a, dt);
@@ -591,6 +654,9 @@ export class Game {
       if (this.dungeon) this.leaveDungeon(false);
       a.x = TOWN.x;
       a.y = TOWN.y + 100;
+      a.alt = 0;
+      a.climb = 0;
+      a.mountId = null;
       a.targetId = null;
       a.moveTo = null;
     }
@@ -621,7 +687,27 @@ export class Game {
 
   private move(a: Actor, dt: number): void {
     const m = this.mods(a);
-    const speed = a.cs.moveSpeed * (1 + (m.speed ?? 0)) * (1 - Math.min(0.8, m.slow ?? 0));
+    let speed = a.cs.moveSpeed * (1 + (m.speed ?? 0)) * (1 - Math.min(0.8, m.slow ?? 0));
+    if (a.mountId) {
+      const def = MOUNT_BY_ID[a.mountId];
+      if (def) speed *= this.isFlying(a) ? def.flySpeed : def.groundSpeed;
+    }
+    // Der Steuerknüppel schlägt jedes Laufziel.
+    if (a.moveDir) {
+      const len = Math.hypot(a.moveDir.x, a.moveDir.y);
+      if (len > 0.001) {
+        a.moveTo = null;
+        a.facing = Math.atan2(a.moveDir.y, a.moveDir.x);
+        a.vx = (a.moveDir.x / len) * speed * Math.min(1, len);
+        a.vy = (a.moveDir.y / len) * speed * Math.min(1, len);
+        const bb = this.bounds;
+        a.x = Math.max(12, Math.min(bb.w - 12, a.x + a.vx * dt));
+        a.y = Math.max(12, Math.min(bb.h - 12, a.y + a.vy * dt));
+        a.stride = (a.stride ?? 0) + speed * dt;
+        return;
+      }
+    }
+
     let tx: number | null = null;
     let ty: number | null = null;
     const target = this.actorById(a.targetId);
@@ -636,13 +722,14 @@ export class Game {
       const d = Math.hypot(target.x - a.x, target.y - a.y);
       if (d > range * 0.9) { tx = target.x; ty = target.y; }
     }
-    if (tx === null || ty === null) { a.vx = 0; a.vy = 0; return; }
+    if (tx === null || ty === null) { a.vx = 0; a.vy = 0; a.stride = 0; return; }
     const dx = tx - a.x;
     const dy = ty - a.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 4) {
       a.moveTo = null;
       a.vx = 0; a.vy = 0;
+      a.stride = 0;
       return;
     }
     a.facing = Math.atan2(dy, dx);
@@ -651,6 +738,7 @@ export class Game {
     const b = this.bounds;
     a.x = Math.max(12, Math.min(b.w - 12, a.x + a.vx * dt));
     a.y = Math.max(12, Math.min(b.h - 12, a.y + a.vy * dt));
+    a.stride = (a.stride ?? 0) + speed * dt;
   }
 
   attackRange(a: Actor): number {
@@ -671,6 +759,7 @@ export class Game {
   }
 
   private playerAutoAttack(a: Actor): void {
+    if (this.isFlying(a)) return;
     const target = this.actorById(a.targetId);
     if (!target || target.dead || target.team === a.team) {
       if (target?.dead) a.targetId = null;
@@ -831,6 +920,9 @@ export class Game {
     this.actors = [this.player];
     this.player.x = DUNGEON_W / 2;
     this.player.y = DUNGEON_ENTRANCE_Y;
+    this.player.alt = 0;
+    this.player.climb = 0;
+    this.player.mountId = null;
     this.player.targetId = null;
     this.player.moveTo = null;
 
@@ -949,8 +1041,10 @@ export class Game {
 
   tapWorld(x: number, y: number): void {
     if (this.player.dead) return;
+    const airborne = this.isFlying(this.player);
     const hit = this.actors.find(
       (a) => a !== this.player && !a.dead && a.kind !== 'npc'
+        && this.isFlying(a) === airborne
         && Math.hypot(a.x - x, a.y - y) < a.radius + 18,
     );
     if (hit && hit.team === 1) {
@@ -963,7 +1057,14 @@ export class Game {
       return;
     }
     this.player.targetId = null;
+    this.player.moveDir = null;
     this.player.moveTo = { x, y };
+  }
+
+  /** Laufrichtung setzen; (0,0) hält an. */
+  steer(x: number, y: number): void {
+    if (this.player.dead) return;
+    this.player.moveDir = Math.hypot(x, y) > 0.08 ? { x, y } : null;
   }
 
   clearTarget(): void {

@@ -1,9 +1,14 @@
 # Viebrans
 
 Ein kleines Handy-MMORPG im Geiste von Flyff — vier Klassen mit je zwei Jobs,
-Leveln, Ausrüstung, Fertigkeiten und Dungeons. Damit sich die Welt nicht leer
-anfühlt, ist sie von einer KI-Bevölkerung bewohnt, die eigenständig levelt,
-farmt, im Weltchat redet und in Gruppendungeons mitkämpft.
+Leveln, Ausrüstung, Fertigkeiten, Dungeons und Reittiere, mit denen man
+abheben kann. Damit sich die Welt nicht leer anfühlt, ist sie von einer
+KI-Bevölkerung bewohnt, die eigenständig levelt, farmt, im Weltchat redet und
+in Gruppendungeons mitkämpft.
+
+Die Welt ist echtes 3D über WebGL (three.js) — sonnig, mit Chibi-Figuren,
+Marktständen und Wolken. Es gibt keine einzige Modell- oder Bilddatei: jeder
+Baum, jedes Haus und jede Figur wird zur Laufzeit aus Grundformen gebaut.
 
 Läuft vollständig im Browser — kein Server, kein Konto, keine laufenden Kosten.
 Der Spielstand liegt lokal im Gerät.
@@ -37,10 +42,12 @@ App-Symbol auf dem Handy und startet im Vollbild, auch offline.
 
 ## Spielen
 
-- **Tippen** auf einen Gegner visiert ihn an, der Held läuft hin und greift automatisch an.
-- **Tippen** auf freien Boden läuft dorthin; **Halten und Ziehen** führt ihn weiter.
-- Die sechs Felder unten sind die Fertigkeitenleiste (am Rechner auch Tasten `1`–`6`, `Tab` zielt).
-- `Held`, `Beutel`, `Können`, `Dungeon` und `Sozial` öffnen die jeweiligen Menüs.
+- **Linke Bildschirmhälfte unten**: dort, wo der Daumen aufsetzt, erscheint der Steuerknüppel.
+- **Rechte Seite wischen** dreht die Kamera, **zwei Finger** zoomen.
+- **Kurz tippen** visiert einen Gegner an oder schickt den Helden zu einem Punkt.
+- Die sechs Felder unten sind die Fertigkeitenleiste.
+- Die runden Knöpfe rechts: aufsitzen und absteigen, darüber steigen und sinken.
+- Am Rechner: `W A S D` laufen, `1`–`6` Fertigkeiten, `Tab` zielt, `M` aufsitzen, `R`/`F` steigen und sinken.
 
 ## Fortschritt
 
@@ -67,6 +74,22 @@ sinkender Erfolgschance, denn das Gold ist auch bei Misserfolg weg.
 
 Daraus ergibt sich der **Gear-Score**: die Summe aus Itemlevel, Seltenheit und
 Aufwertung über alle sieben Slots. Er ist der Türsteher vor den Dungeons.
+
+### Reittiere und Fliegen
+
+Ab Level 15 steht der Stallmeister im Heldenmenü bereit. Jedes Reittier trägt
+am Boden, die meisten heben zusätzlich ab — das namensgebende Element des
+Vorbilds.
+
+| Reittier | Ab Lv | Boden | Luft |
+|---|---|---|---|
+| Borstenkeiler | 15 | ×1,55 | bleibt am Boden |
+| Hexenbesen | 20 | ×1,35 | ×2,0 bis 340 m |
+| Schwebebrett | 25 | ×1,70 | ×2,3 bis 420 m |
+| Greif | 40 | ×1,80 | ×2,9 bis 560 m |
+
+In der Luft ist man schneller und für Bodengegner unerreichbar — kann aber
+selbst nicht kämpfen. In Instanzen bleibt das Reittier im Stall.
 
 ### Dungeons
 
@@ -112,7 +135,14 @@ src/
     engine.ts      Kampf, Aggro, KI, Instanzen, Hauptschleife
     player.ts      Spielstand, Fortschritt, Ausrüsten
     save.ts        Speichern und Offline-Fortschritt
-  render/      Canvas-Darstellung (prozedural, keine Bilddateien)
+    mounts.ts      Reittiere, Flugwerte
+  render3d/    3D-Darstellung mit three.js — alles prozedural erzeugt
+    palette.ts     Farbwelt
+    terrain.ts     Geländehöhe (nur optisch)
+    models.ts      Figuren, Gegner, Reittiere, Waffen aus Grundformen
+    world3d.ts     Gelände, Stadt, Bewuchs, Wegweiser, Dungeonhalle
+    scene.ts       Szene, Kamera, Figurenverwaltung, Animation
+    overlay.ts     Namen, Lebensbalken und Schadenszahlen als 2D-Ebene
   ui/          HUD und Menüs als schlichtes DOM
 ```
 
@@ -139,6 +169,7 @@ Im Browser-Log verfügbar, praktisch zum Ausprobieren der späteren Inhalte:
 ```js
 viebrans.setLevel(30)  // Level setzen
 viebrans.gearUp(30)    // volle Ausrüstung auf Itemlevel 30
+viebrans.giveMounts()  // alle Reittiere freischalten
 viebrans.reset()       // Spielstand löschen
 ```
 
@@ -146,6 +177,7 @@ viebrans.reset()       // Spielstand löschen
 
 - Quests und ein Questlog statt reinem Grinden
 - Minikarte und Schnellreise zwischen den Zonen
+- Ton: Treffer, Schritte, Levelaufstieg (als kleine Klangsynthese, ohne Dateien)
 - Handel und Flüsterchat mit den Bots statt nur Weltchat
 - Gilden, in die man selbst eintreten kann
 - Mehr Endgame: wöchentliche Bosse, harte Modi, Aufwertungsschutz

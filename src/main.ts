@@ -5,8 +5,10 @@ import { createSave, equip, type SaveData } from './game/player';
 import { rollLoot, SLOT_ORDER } from './game/items';
 import { deleteSave, freshPopulation, hasSave, loadSave, writeSave } from './game/save';
 import { seed } from './game/rng';
-import { Renderer } from './render/renderer';
+import { Renderer3D } from './render3d/scene';
+import { Overlay } from './render3d/overlay';
 import { Hud } from './ui/hud';
+import { Joystick } from './ui/joystick';
 import { Panels, type TabId } from './ui/panels';
 import { clear, el, tap, toast } from './ui/dom';
 import type { ClassId } from './game/types';
@@ -16,13 +18,16 @@ seed(Date.now() & 0xffffffff);
 
 const gameRoot = el('div', { id: 'game' });
 const canvas = el('canvas', { id: 'view' }) as HTMLCanvasElement;
-gameRoot.append(canvas);
+const plates = el('canvas', { id: 'plates' }) as HTMLCanvasElement;
+gameRoot.append(canvas, plates);
 app.append(gameRoot);
 
 let game: Game | null = null;
-let renderer: Renderer | null = null;
+let renderer: Renderer3D | null = null;
+let overlay: Overlay | null = null;
 let hud: Hud | null = null;
 let panels: Panels | null = null;
+let stick: Joystick | null = null;
 let saveTimer = 0;
 
 // ------------------------------------------------------------------ Screens
@@ -52,7 +57,10 @@ function showStart(): void {
 
   screen.append(
     el('h1', { class: 'logo' }, [el('span', { text: 'Vie' }), 'brans']),
-    el('p', { class: 'tagline', text: 'Ein kleines Handy-MMORPG im Geiste von Flyff. Vier Klassen, acht Jobs, eine Welt voller Abenteurer, die nie schlafen.' }),
+    el('p', {
+      class: 'tagline',
+      text: 'Ein kleines Handy-MMORPG im Geiste von Flyff. Vier Klassen, acht Jobs, Reittiere zum Fliegen — und eine Welt voller Abenteurer, die nie schlafen.',
+    }),
     ...buttons,
   );
   app.append(screen);
@@ -62,7 +70,7 @@ function showCreate(): void {
   const screen = el('div', { class: 'screen' });
   let chosen: ClassId = 'warrior';
 
-  const nameInput = el('input', { type: 'text', maxlength: '14', placeholder: 'Heldenname', value: '' }) as HTMLInputElement;
+  const nameInput = el('input', { type: 'text', maxlength: '14', placeholder: 'Heldenname' }) as HTMLInputElement;
   const grid = el('div', { class: 'class-grid' });
   const startBtn = el('button', { class: 'btn primary', text: 'Abenteuer beginnen' });
 
@@ -101,21 +109,23 @@ function showCreate(): void {
 // --------------------------------------------------------------------- Spiel
 
 function startGame(data: SaveData): void {
-  // Erst einblenden, dann den Renderer bauen — sonst misst er eine Fläche von 0.
   gameRoot.classList.add('on');
   game = new Game(data);
-  renderer = new Renderer(canvas);
+  renderer = new Renderer3D(canvas);
+  overlay = new Overlay(plates);
+  stick = new Joystick();
   panels = new Panels(game, () => {
     hud?.buildSkillBar();
     persist();
   });
   hud = new Hud(game, (tab: TabId) => panels!.toggle(tab));
-  gameRoot.append(hud.root, panels.root);
+  gameRoot.append(hud.root, stick.root, panels.root);
   renderer.resize();
+  overlay.resize();
 
   bindInput();
   game.notify(`Willkommen in Hafen Viebran, ${data.name}.`, 'info');
-  game.notify('Tippe auf einen Gegner, um ihn anzugreifen.', 'info');
+  game.notify('Links laufen, rechts die Kamera drehen.', 'info');
   requestAnimationFrame(loop);
 }
 
@@ -124,48 +134,80 @@ function persist(): void {
 }
 
 function bindInput(): void {
-  const handleTap = (clientX: number, clientY: number) => {
-    if (!game || !renderer || panels?.open) return;
-    const rect = canvas.getBoundingClientRect();
-    const p = renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
-    game.tapWorld(p.x, p.y);
-  };
+  /** Zeiger, die gerade die Kamera drehen. */
+  const drags = new Map<number, { x: number; y: number; moved: number }>();
+  let pinchStart: number | null = null;
 
-  // Tippen zielt an oder läuft los; Halten und Ziehen führt den Helden weiter.
-  let dragging = false;
-  const dragTo = (clientX: number, clientY: number) => {
-    if (!game || !renderer || panels?.open || game.player.dead) return;
-    const rect = canvas.getBoundingClientRect();
-    const p = renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
-    game.player.targetId = null;
-    game.player.moveTo = { x: p.x, y: p.y };
-  };
+  const isStickZone = (x: number, y: number) =>
+    x < window.innerWidth * 0.46 && y > window.innerHeight * 0.34;
 
-  canvas.addEventListener('touchstart', (ev) => {
-    dragging = true;
-    const t = ev.changedTouches[0];
-    handleTap(t.clientX, t.clientY);
-  }, { passive: true });
-  canvas.addEventListener('touchmove', (ev) => {
-    if (!dragging) return;
-    const t = ev.changedTouches[0];
-    dragTo(t.clientX, t.clientY);
-  }, { passive: true });
-  canvas.addEventListener('touchend', () => { dragging = false; }, { passive: true });
-
-  canvas.addEventListener('mousedown', (ev) => {
-    dragging = true;
-    handleTap(ev.clientX, ev.clientY);
+  canvas.addEventListener('pointerdown', (ev) => {
+    if (panels?.open) return;
+    canvas.setPointerCapture(ev.pointerId);
+    if (stick && !stick.active && isStickZone(ev.clientX, ev.clientY)) {
+      stick.start(ev.pointerId, ev.clientX, ev.clientY);
+      return;
+    }
+    drags.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moved: 0 });
   });
-  canvas.addEventListener('mousemove', (ev) => { if (dragging) dragTo(ev.clientX, ev.clientY); });
-  window.addEventListener('mouseup', () => { dragging = false; });
 
-  window.addEventListener('resize', () => renderer?.resize());
-  window.addEventListener('orientationchange', () => setTimeout(() => renderer?.resize(), 120));
+  canvas.addEventListener('pointermove', (ev) => {
+    if (stick?.owns(ev.pointerId)) {
+      stick.move(ev.clientX, ev.clientY);
+      return;
+    }
+    const d = drags.get(ev.pointerId);
+    if (!d) return;
+    const dx = ev.clientX - d.x;
+    const dy = ev.clientY - d.y;
+    d.moved += Math.abs(dx) + Math.abs(dy);
+    d.x = ev.clientX;
+    d.y = ev.clientY;
+
+    if (drags.size >= 2) {
+      // Zwei Finger: Abstand steuert den Zoom.
+      const pts = [...drags.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStart !== null && dist > 0) renderer?.zoom(pinchStart / dist);
+      pinchStart = dist;
+      return;
+    }
+    renderer?.orbit(dx, dy);
+  });
+
+  const endPointer = (ev: PointerEvent) => {
+    if (stick?.owns(ev.pointerId)) {
+      stick.end();
+      game?.steer(0, 0);
+      return;
+    }
+    const d = drags.get(ev.pointerId);
+    drags.delete(ev.pointerId);
+    if (drags.size < 2) pinchStart = null;
+    // Ein kurzer Tipp ohne Wischen wählt ein Ziel oder ein Laufziel.
+    if (d && d.moved < 12 && game && renderer) {
+      const rect = canvas.getBoundingClientRect();
+      const hit = renderer.pick(game, ev.clientX - rect.left, ev.clientY - rect.top);
+      if (hit.actorId) {
+        game.player.targetId = hit.actorId;
+        game.player.moveDir = null;
+      } else if (hit.ground) {
+        game.tapWorld(hit.ground.x, hit.ground.y);
+      }
+    }
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+
+  const onResize = () => { renderer?.resize(); overlay?.resize(); };
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', () => setTimeout(onResize, 140));
 
   // Tastatur für den Test am Rechner
+  const keys = new Set<string>();
   window.addEventListener('keydown', (ev) => {
     if (!game) return;
+    keys.add(ev.key.toLowerCase());
     const n = parseInt(ev.key, 10);
     if (n >= 1 && n <= 6) {
       const id = game.save.quickbar[n - 1];
@@ -175,22 +217,35 @@ function bindInput(): void {
       }
     }
     if (ev.key === 'Escape') panels?.hide();
+    if (ev.key.toLowerCase() === 'm') {
+      const err = game.toggleMount();
+      if (err) game.notify(err, 'bad');
+    }
     if (ev.key === 'Tab') {
       ev.preventDefault();
       const enemy = game.actors
-        .filter((a) => a.team === 1 && !a.dead)
+        .filter((a) => a.team === 1 && !a.dead && game!.isFlying(a) === game!.isFlying(game!.player))
         .sort((a, b) =>
           Math.hypot(a.x - game!.player.x, a.y - game!.player.y) -
           Math.hypot(b.x - game!.player.x, b.y - game!.player.y))[0];
       if (enemy) game.player.targetId = enemy.id;
     }
   });
+  window.addEventListener('keyup', (ev) => keys.delete(ev.key.toLowerCase()));
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) persist();
-  });
+  // Tastatursteuerung in denselben Richtungsvektor gießen wie den Knüppel.
+  keyboardVector = () => {
+    const x = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
+    const y = (keys.has('s') ? 1 : 0) - (keys.has('w') ? 1 : 0);
+    const climb = (keys.has('r') ? 1 : 0) - (keys.has('f') ? 1 : 0);
+    return { x, y, climb };
+  };
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
   window.addEventListener('pagehide', persist);
 }
+
+let keyboardVector: () => { x: number; y: number; climb: number } = () => ({ x: 0, y: 0, climb: 0 });
 
 let last = performance.now();
 let botRefresh = 0;
@@ -198,9 +253,24 @@ let botRefresh = 0;
 function loop(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (game && renderer && hud) {
+  if (game && renderer && overlay && hud) {
+    // Eingaben relativ zur Kamera in Weltrichtung umrechnen.
+    const kb = keyboardVector();
+    const sx = (stick?.x ?? 0) + kb.x;
+    const sy = (stick?.y ?? 0) + kb.y;
+    if (Math.hypot(sx, sy) > 0.08) {
+      const f = renderer.forward;
+      const rx = f.y;
+      const ry = -f.x;
+      game.steer(f.x * -sy + rx * sx, f.y * -sy + ry * sx);
+    } else {
+      game.steer(0, 0);
+    }
+    if (kb.climb !== 0) game.setClimb(kb.climb > 0 ? 1 : -1);
+
     game.update(dt);
-    renderer.draw(game);
+    renderer.draw(game, dt);
+    overlay.draw(game, renderer);
     hud.update();
     if (panels?.open && panels.needsLiveRefresh()) panels.render();
 
@@ -218,9 +288,6 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-// Service Worker nur im Produktionsbuild registrieren. In eingebetteten oder
-// sandkastenartigen Kontexten wirft die Registrierung teils sofort — dann läuft
-// das Spiel eben ohne Offline-Zwischenspeicher weiter.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     try {
@@ -232,14 +299,16 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 /**
- * Entwickler- und Testkonsole. In der Browser-Konsole erreichbar:
- *   viebrans.setLevel(30)   — Level setzen (zum Ausprobieren der Jobs)
+ * Entwickler- und Testkonsole:
+ *   viebrans.setLevel(30)   — Level setzen
  *   viebrans.gearUp(30)     — komplette Ausrüstung auf Itemlevel 30
+ *   viebrans.giveMounts()   — alle Reittiere freischalten
  *   viebrans.reset()        — Spielstand löschen
  */
 (window as unknown as Record<string, unknown>).viebrans = {
   reset: () => { deleteSave(); location.reload(); },
   game: () => game,
+  renderer: () => renderer,
   setLevel: (n: number) => {
     if (!game) return;
     game.save.level = Math.max(1, Math.min(MAX_LEVEL, Math.round(n)));
@@ -257,6 +326,12 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       if (item.slot === slot) equip(game.save, item);
     }
     game.recomputePlayer();
+    persist();
+  },
+  giveMounts: () => {
+    if (!game) return;
+    game.save.mounts = ['boar', 'broom', 'board', 'griffin'];
+    game.save.activeMount = 'broom';
     persist();
   },
 };
