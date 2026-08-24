@@ -1,46 +1,41 @@
 /**
- * Packt den Produktionsbuild in eine einzige HTML-Datei — praktisch zum
- * Verschicken oder Hochladen, wenn kein Webserver zur Hand ist.
- *
- *   npm run build && node build-single.mjs [zieldatei]
+ * Packt den Produktionsbuild in eine einzelne HTML-Datei — praktisch, um das
+ * Spiel ohne Server weiterzugeben. Voraussetzung: `npm run build` lief vorher.
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { globSync } from 'node:fs';
 
-const ASSETS = 'dist/assets';
-const out = process.argv[2] ?? 'dist/viebrans-einzeldatei.html';
+const cssPath = globSync('dist/assets/*.css')[0];
+const jsPath = globSync('dist/assets/*.js')[0];
+let css = readFileSync(cssPath, 'utf8');
+const js = readFileSync(jsPath, 'utf8');
 
-const find = (ext) => {
-  const hit = readdirSync(ASSETS).find((f) => f.endsWith(ext));
-  if (!hit) throw new Error(`Keine ${ext}-Datei in ${ASSETS} — lief "npm run build"?`);
-  return readFileSync(join(ASSETS, hit), 'utf8');
-};
+if (/<\/script/i.test(js) || /<\/style/i.test(css)) {
+  throw new Error('Quelltext enthält ein schließendes Tag und würde das Dokument zerreißen.');
+}
 
-const css = find('.css');
-const js = find('.js');
+// Schriftimport als <link> herausziehen: zuverlässiger als @import im <style>.
+let fontLink = '';
+const m = css.match(/@import\s*(?:url\()?["']([^"']+)["']\)?\s*;/);
+if (m) {
+  css = css.replace(m[0], '');
+  fontLink = `<link rel="stylesheet" href="${m[1]}">\n`;
+}
 
-// Ein schließendes Tag im Inhalt würde den umgebenden Block vorzeitig beenden.
-if (/<\/script/i.test(js)) throw new Error('Skript enthält ein schließendes script-Tag');
-if (/<\/style/i.test(css)) throw new Error('Stylesheet enthält ein schließendes style-Tag');
-
-writeFileSync(out, `<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0b1020" />
-<title>Viebrans</title>
-<style>
+const out = `<title>Viebrans</title>
+${fontLink}<style>
 ${css}
+/* In eingebetteten Rahmen gibt es keine Geräteränder zu umgehen. */
+:root { --safe-t: 0px; --safe-b: 0px; }
 </style>
-</head>
-<body>
+
 <div id="app"></div>
+
 <script type="module">
 ${js}
 </script>
-</body>
-</html>
-`, 'utf8');
+`;
 
-console.log(`${out} geschrieben`);
+const target = process.argv[2] ?? 'dist/viebrans-einzeldatei.html';
+writeFileSync(target, out, 'utf8');
+console.log(`${target} — ${Math.round(Buffer.byteLength(out) / 1024)} kB, Schriftlink: ${fontLink ? 'ja' : 'nein'}`);
